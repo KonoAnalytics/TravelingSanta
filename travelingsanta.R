@@ -3,9 +3,10 @@ travelingsanta <- function(maxcities=NULL)
     ptm <- proc.time() #start the timer
     
     library('TSP')
-    library('geosphere')
-    library('maptools')
-    library('maps')
+    #library('ggmap')
+    #library('geosphere')
+    #library('maptools')
+    #library('maps')
     dfcities <- getcities()
     if(!is.null(maxcities))
     {
@@ -21,16 +22,35 @@ travelingsanta <- function(maxcities=NULL)
     shortestdistance <- as.integer(sort(c(sapply(tours, tour_length))))[1]
     shortestpath <- unlist(tours[shortestmethod])
     
-    
+    dfplot <- data.frame()
     for (i in 1:length(shortestpath))
     {
+        nextcityname <- gsub(paste0(shortestmethod,"."),"",names(shortestpath[shortestpath==i]))
+        nextcitylat <- dfcities$latitude[dfcities$cityname == nextcityname]
+        nextcitylong <- dfcities$longitude[dfcities$cityname == nextcityname]
         
+        nextcity <- data.frame(city=nextcityname,
+                               lat=nextcitylat,
+                               long=nextcitylong)
+        dfplot <- rbind(dfplot,nextcity)
     }
+    nextcityname <- gsub(paste0(shortestmethod,"."),"",names(shortestpath[shortestpath==1]))
+    nextcitylat <- dfcities$latitude[dfcities$cityname == nextcityname]
+    nextcitylong <- dfcities$longitude[dfcities$cityname == nextcityname]
     
+    nextcity <- data.frame(city=nextcityname,
+                           lat=nextcitylat,
+                           long=nextcitylong)
+    dfplot <- rbind(dfplot,nextcity)    
+    
+    #map("world", fill=TRUE, col="white", bg="lightblue")
+    #points(dfplot$long,dfplot$lat, col="red", pch=16)
+    pushtodomo(df=dfplot,datasetname="Traveling Santa",createdataset=FALSE)
+
     print("Execution Time:")
     print(proc.time()-ptm)
     
-    tours
+    dfplot
 }
 
 getcities <- function()
@@ -38,8 +58,9 @@ getcities <- function()
     filepath <- 'http://gael-varoquaux.info/images/misc/cities.txt'
     df <- read.csv(filepath, sep="\t")
     names(df)[1] <- 'cityname'
-    dfnorthpole <- data.frame(cityname="North Pole",longitude=90,latitude=90)
+    dfnorthpole <- data.frame(cityname="North Pole",longitude=0,latitude=80)
     df <- rbind(dfnorthpole, df)
+    df <- df[!duplicated(df$cityname),]
     df
 }
 
@@ -70,4 +91,26 @@ plot_path <- function(path)
     path_line <- SpatialLines(list(Lines(list(Line(USCA312_coords[path,])),ID="1")))
     plot(path_line, add=TRUE,col="black")
     points(USCA312_coords[c(head(path,1), tail(pathj,1)),], pch=19, col = "black")
+}
+
+pushtodomo <- function(df, datasetname, api_key=NULL, organization="KonoAnalytics", createdataset=FALSE)
+{
+    #library("devtools")
+    #install_github('konoanalytics/KonostdlibR')
+    library("KonostdlibR")
+    library("DomoR")
+    
+    if(is.null(api_key))
+    {
+        api_key <- as.character(KonostdlibR::getcredentials("Domo")$api_key)
+    }
+    DomoR::init(organization,api_key)
+    if(createdataset)
+    {
+        DomoR::create(df, name=datasetname)
+    }else
+    {
+        DataSetInfo <- DomoR::list_ds(name=datasetname)
+        replace <- DomoR::replace_ds(DataSetInfo$id, df)
+    }
 }
